@@ -4,6 +4,25 @@
 // defined using these types.
 // ─────────────────────────────────────────────
 
+// ─────────────────────────────────────────────
+// Project-driven builder types (new concept)
+// ─────────────────────────────────────────────
+
+export interface ProjectIdea {
+  emoji: string
+  label: string
+  example: string  // shown as hint, also used as the AI prompt topic
+}
+
+export type BuilderType = "web" | "companion"
+
+export interface StageProject {
+  theme: string               // e.g. "My Webpage"
+  themeDescription: string    // one-line shown to kid
+  ideas: ProjectIdea[]        // suggested topics to pick from
+  builderType?: BuilderType   // which builder component to render (default: "web")
+}
+
 export type AgeRange = [min: number, max: number]
 
 export type ModelTier = "lightweight" | "mid" | "premium"
@@ -17,6 +36,7 @@ export type ActivityType =
   | "remix"               // Kid modifies a previous output
   | "quiz"                // Knowledge check (auto-graded)
   | "multi-step"          // Sequential prompt chain
+  | "code-build"          // Kid writes real code, sees live preview, AI helps
 
 export type OutputType =
   | "storybook"
@@ -84,6 +104,11 @@ export interface Activity {
   steps?: string[]
   // For quiz type
   quiz?: QuizQuestion[]
+  // For code-build type
+  starterCode?: string         // Code the kid starts with
+  buildInstructions?: string[] // Step-by-step what to add/change
+  buildGoal?: string           // What the finished program does
+  language?: "html" | "css" | "js" | "python"
   model: ModelTier
   maxTokens: number
   xpReward: number
@@ -167,4 +192,5 @@ export interface Stage {
   badges: Badge[]
   totalXP: number                  // Sum of all lesson + activity XP
   primaryModel: ModelTier
+  project?: StageProject           // Project-driven builder config (new concept)
 }

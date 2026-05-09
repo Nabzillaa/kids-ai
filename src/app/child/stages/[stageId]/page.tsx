@@ -14,9 +14,12 @@ import { GlassCard } from "@/components/layout/GlassCard"
 import { BadgeCard } from "@/components/gamification/BadgeCard"
 import { FillInTheBlank } from "@/components/activities/FillInTheBlank"
 import { QuizActivity } from "@/components/activities/QuizActivity"
+import { CodeBuilder } from "@/components/activities/CodeBuilder"
+import { LessonViewer } from "@/components/activities/LessonViewer"
+import { PortfolioView } from "@/components/activities/PortfolioView"
 import { getStageById } from "@/stages"
-import { getStageProgress, markActivityComplete, setLastActivity } from "@/lib/progress"
-import type { Activity, DifficultyLevel } from "@/types/stage"
+import { getStageProgress, markActivityComplete, markLessonComplete, setLastActivity } from "@/lib/progress"
+import type { Activity, DifficultyLevel, Lesson } from "@/types/stage"
 
 const STAGE_COLORS: Record<string, string> = {
   "stage-1": "#ffb800",
@@ -29,7 +32,7 @@ const STAGE_COLORS: Record<string, string> = {
   "stage-8": "#a855f7",
 }
 
-type Tab = "overview" | "lessons" | "activities" | "tips" | "badges"
+type Tab = "overview" | "lessons" | "activities" | "tips" | "badges" | "portfolio"
 
 export default function StagePage({ params }: { params: Promise<{ stageId: string }> }) {
   const { stageId } = use(params)
@@ -39,19 +42,24 @@ export default function StagePage({ params }: { params: Promise<{ stageId: strin
   const color = STAGE_COLORS[stageId] ?? "#00d4ff"
   const [mounted, setMounted] = useState(false)
   const [completedIds, setCompletedIds] = useState<string[]>([])
+  const [completedLessonIds, setCompletedLessonIds] = useState<string[]>([])
   const [lastActivityId, setLastActivityId] = useState<string | null>(null)
 
   useEffect(() => {
     setMounted(true)
     const p = getStageProgress(stageId)
     setCompletedIds(p.completedActivityIds)
+    setCompletedLessonIds(p.completedLessonIds)
     setLastActivityId(p.lastActivityId)
   }, [stageId])
 
   const [activeTab, setActiveTab] = useState<Tab>("overview")
   const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null)
+  const [selectedLesson, setSelectedLesson] = useState<Lesson | null>(null)
   const [selectedDifficulty, setSelectedDifficulty] = useState<DifficultyLevel>("beginner")
   const [earnedXP, setEarnedXP] = useState(0)
+
+  const hasPortfolio = stage.output.type === "character-portfolio"
 
   const tabs: { id: Tab; label: string; emoji: string }[] = [
     { id: "overview",    label: "Overview",    emoji: "🗺️" },
@@ -59,6 +67,7 @@ export default function StagePage({ params }: { params: Promise<{ stageId: strin
     { id: "activities",  label: "Activities",  emoji: "⚡" },
     { id: "tips",        label: "Tip Cards",   emoji: "💡" },
     { id: "badges",      label: "Badges",      emoji: "🏆" },
+    ...(hasPortfolio ? [{ id: "portfolio" as Tab, label: "Portfolio", emoji: "🦊" }] : []),
   ]
 
   // Group activities by difficulty for the activities tab
@@ -75,6 +84,15 @@ export default function StagePage({ params }: { params: Promise<{ stageId: strin
       )
       setLastActivityId(selectedActivity.id)
     }
+  }
+
+  const handleLessonComplete = (xp: number) => {
+    if (!selectedLesson) return
+    setEarnedXP((prev) => prev + xp)
+    markLessonComplete(stageId, selectedLesson.id)
+    setCompletedLessonIds((prev) =>
+      prev.includes(selectedLesson.id) ? prev : [...prev, selectedLesson.id]
+    )
   }
 
   const openActivity = (activity: Activity) => {
@@ -131,7 +149,7 @@ export default function StagePage({ params }: { params: Promise<{ stageId: strin
           {tabs.map((tab) => (
             <button
               key={tab.id}
-              onClick={() => { setActiveTab(tab.id); setSelectedActivity(null) }}
+              onClick={() => { setActiveTab(tab.id); setSelectedActivity(null); setSelectedLesson(null) }}
               className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-orbitron font-bold whitespace-nowrap transition-all duration-200 flex-shrink-0"
               style={
                 activeTab === tab.id
@@ -221,43 +239,108 @@ export default function StagePage({ params }: { params: Promise<{ stageId: strin
               </div>
             )}
 
-            {/* ── LESSONS ── */}
-            {activeTab === "lessons" && (
+            {/* ── LESSONS LIST ── */}
+            {activeTab === "lessons" && !selectedLesson && (
               <div className="space-y-3">
-                {stage.lessons.map((lesson, i) => (
-                  <motion.div
-                    key={lesson.id}
-                    initial={{ opacity: 0, x: -10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: i * 0.04 }}
-                  >
-                    <GlassCard hover className="p-5">
-                      <div className="flex items-start gap-4">
-                        <div
-                          className="w-10 h-10 rounded-xl flex items-center justify-center text-sm font-orbitron font-black flex-shrink-0"
-                          style={{ background: `${color}15`, border: `1px solid ${color}30`, color }}
-                        >
-                          {i + 1}
-                        </div>
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-1">
-                            <h3 className="font-orbitron font-bold text-sm text-white">{lesson.title}</h3>
+                {/* Lesson progress */}
+                {completedLessonIds.length > 0 && (
+                  <GlassCard className="p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-orbitron font-bold tracking-widest uppercase" style={{ color }}>
+                        Lessons Read
+                      </span>
+                      <span className="text-xs font-orbitron font-bold" style={{ color }}>
+                        {completedLessonIds.length} / {stage.lessons.length}
+                      </span>
+                    </div>
+                    <div className="h-1.5 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.06)" }}>
+                      <motion.div
+                        className="h-full rounded-full"
+                        style={{ background: `linear-gradient(90deg, ${color}, ${color}cc)`, boxShadow: `0 0 8px ${color}60` }}
+                        initial={{ width: 0 }}
+                        animate={{ width: `${(completedLessonIds.length / stage.lessons.length) * 100}%` }}
+                        transition={{ duration: 0.6, ease: "easeOut" }}
+                      />
+                    </div>
+                  </GlassCard>
+                )}
+
+                {stage.lessons.map((lesson, i) => {
+                  const isDone = completedLessonIds.includes(lesson.id)
+                  return (
+                    <motion.div
+                      key={lesson.id}
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: i * 0.04 }}
+                    >
+                      <GlassCard hover className="p-5" onClick={() => setSelectedLesson(lesson)}>
+                        <div className="flex items-start gap-4">
+                          <div
+                            className="w-10 h-10 rounded-xl flex items-center justify-center text-sm font-orbitron font-black flex-shrink-0"
+                            style={
+                              isDone
+                                ? { background: "rgba(0,255,136,0.12)", border: "1px solid rgba(0,255,136,0.3)", color: "#00ff88" }
+                                : { background: `${color}15`, border: `1px solid ${color}30`, color }
+                            }
+                          >
+                            {isDone ? "✓" : i + 1}
                           </div>
-                          <p className="text-sm font-space mb-2" style={{ color: "rgba(255,255,255,0.55)" }}>
-                            {lesson.summary}
-                          </p>
-                          <div className="flex gap-3 text-xs font-space" style={{ color: "rgba(255,255,255,0.35)" }}>
-                            <span>⏱ {lesson.durationMinutes} min</span>
-                            <span>⚡ +{lesson.xpReward} XP</span>
-                            <span>🔓 Unlocks {lesson.unlocksActivityIds.length} activities</span>
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-1 flex-wrap">
+                              <h3
+                                className="font-orbitron font-bold text-sm"
+                                style={{ color: isDone ? "rgba(255,255,255,0.5)" : "white" }}
+                              >
+                                {lesson.title}
+                              </h3>
+                              {isDone && (
+                                <span className="text-xs font-orbitron font-bold px-2 py-0.5 rounded-full" style={{ background: "rgba(0,255,136,0.1)", border: "1px solid rgba(0,255,136,0.25)", color: "#00ff88" }}>
+                                  Done
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-sm font-space mb-2" style={{ color: "rgba(255,255,255,0.55)" }}>
+                              {lesson.summary}
+                            </p>
+                            <div className="flex gap-3 text-xs font-space" style={{ color: "rgba(255,255,255,0.35)" }}>
+                              <span>⏱ {lesson.durationMinutes} min</span>
+                              <span style={{ color: isDone ? "rgba(255,255,255,0.2)" : color }}>+{lesson.xpReward} XP</span>
+                              <span>🔓 {lesson.unlocksActivityIds.length} activities</span>
+                            </div>
                           </div>
+                          <span className="text-sm flex-shrink-0" style={{ color: "rgba(255,255,255,0.2)" }}>→</span>
                         </div>
-                      </div>
-                    </GlassCard>
-                  </motion.div>
-                ))}
+                      </GlassCard>
+                    </motion.div>
+                  )
+                })}
               </div>
             )}
+
+            {/* ── LESSON VIEWER ── */}
+            {activeTab === "lessons" && selectedLesson && (() => {
+              const lessonIndex = stage.lessons.findIndex((l) => l.id === selectedLesson.id)
+              const prevLesson  = stage.lessons[lessonIndex - 1] ?? null
+              const nextLesson  = stage.lessons[lessonIndex + 1] ?? null
+              const unlocked    = selectedLesson.unlocksActivityIds
+                .map((aid) => stage.activities.find((a) => a.id === aid)?.title)
+                .filter(Boolean) as string[]
+              return (
+                <LessonViewer
+                  lesson={selectedLesson}
+                  lessonIndex={lessonIndex}
+                  totalLessons={stage.lessons.length}
+                  accentColor={color}
+                  isCompleted={completedLessonIds.includes(selectedLesson.id)}
+                  onComplete={handleLessonComplete}
+                  onClose={() => setSelectedLesson(null)}
+                  onPrev={prevLesson ? () => setSelectedLesson(prevLesson) : undefined}
+                  onNext={nextLesson ? () => setSelectedLesson(nextLesson) : undefined}
+                  unlockedActivityTitles={unlocked}
+                />
+              )
+            })()}
 
             {/* ── ACTIVITIES ── */}
             {activeTab === "activities" && !selectedActivity && (
@@ -345,7 +428,7 @@ export default function StagePage({ params }: { params: Promise<{ stageId: strin
                                       : { background: `${tierColor}10`, border: `1px solid ${tierColor}25` }
                                   }
                                 >
-                                  {isDone ? "✓" : activity.type === "quiz" ? "📝" : activity.type === "multi-step" ? "🔗" : "✍️"}
+                                  {isDone ? "✓" : activity.type === "quiz" ? "📝" : activity.type === "code-build" ? "💻" : activity.type === "multi-step" ? "🔗" : "✍️"}
                                 </div>
 
                                 <div className="flex-1 min-w-0">
@@ -360,6 +443,12 @@ export default function StagePage({ params }: { params: Promise<{ stageId: strin
                                       <span className="text-xs font-orbitron font-bold px-2 py-0.5 rounded-full flex-shrink-0"
                                         style={{ background: `${color}15`, border: `1px solid ${color}30`, color }}>
                                         In Progress
+                                      </span>
+                                    )}
+                                    {activity.contributesToOutput && !isDone && hasPortfolio && (
+                                      <span className="text-xs font-orbitron font-bold px-2 py-0.5 rounded-full flex-shrink-0"
+                                        style={{ background: `${color}10`, border: `1px solid ${color}25`, color }}>
+                                        ✦ Portfolio
                                       </span>
                                     )}
                                     {isDone && (
@@ -414,21 +503,31 @@ export default function StagePage({ params }: { params: Promise<{ stageId: strin
 
                   <div className="border-t mb-5" style={{ borderColor: `${color}15` }} />
 
-                  {selectedActivity.type !== "quiz" && (
-                    <FillInTheBlank
+                  {selectedActivity.type === "quiz" && selectedActivity.quiz && (
+                    <QuizActivity
                       activity={selectedActivity}
                       accentColor={color}
-                      stageId={stageId}
-                      stageName={stage.name}
                       onComplete={handleActivityComplete}
                       onNext={hasNextActivity ? handleNextActivity : undefined}
                     />
                   )}
 
-                  {selectedActivity.type === "quiz" && selectedActivity.quiz && (
-                    <QuizActivity
+                  {selectedActivity.type === "code-build" && (
+                    <CodeBuilder
                       activity={selectedActivity}
                       accentColor={color}
+                      stageId={stageId}
+                      onComplete={handleActivityComplete}
+                      onNext={hasNextActivity ? handleNextActivity : undefined}
+                    />
+                  )}
+
+                  {selectedActivity.type !== "quiz" && selectedActivity.type !== "code-build" && (
+                    <FillInTheBlank
+                      activity={selectedActivity}
+                      accentColor={color}
+                      stageId={stageId}
+                      stageName={stage.name}
                       onComplete={handleActivityComplete}
                       onNext={hasNextActivity ? handleNextActivity : undefined}
                     />
@@ -490,6 +589,15 @@ export default function StagePage({ params }: { params: Promise<{ stageId: strin
                   Complete activities and the stage to unlock your badges!
                 </p>
               </div>
+            )}
+
+            {/* ── PORTFOLIO ── */}
+            {activeTab === "portfolio" && hasPortfolio && (
+              <PortfolioView
+                stage={stage}
+                accentColor={color}
+                completedActivityIds={completedIds}
+              />
             )}
           </motion.div>
         </AnimatePresence>

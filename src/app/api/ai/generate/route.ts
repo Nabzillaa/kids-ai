@@ -124,8 +124,16 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     console.error("[AI Generate]", err)
 
-    // Give a helpful hint if Ollama isn't running
-    const message = err instanceof Error && err.message.includes("ECONNREFUSED")
+    const isConnRefused = (e: unknown): boolean => {
+      if (!e || typeof e !== "object") return false
+      const obj = e as Record<string, unknown>
+      if (obj["code"] === "ECONNREFUSED") return true
+      if (typeof obj["message"] === "string" && obj["message"].includes("ECONNREFUSED")) return true
+      if (obj["cause"]) return isConnRefused(obj["cause"])
+      if (Array.isArray(obj["errors"])) return (obj["errors"] as unknown[]).some(isConnRefused)
+      return false
+    }
+    const message = isConnRefused(err)
       ? "⚠️ Ollama isn't running. Open a terminal and run: ollama serve"
       : "Oops! The AI ran into a problem. Try again in a moment."
 

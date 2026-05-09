@@ -80,7 +80,7 @@ export default function HomePage() {
             transition={{ delay: 0.3 }}
             className="flex flex-wrap gap-4 justify-center"
           >
-            <Link href={`/child/stages/${stages[0].id}`}>
+            <Link href={`/child/build/${stages[0].id}`}>
               <button className="btn-solid-cyan px-8 py-3.5 rounded-xl font-orbitron font-bold text-sm tracking-wide">
                 Start Stage 1 🚀
               </button>
@@ -137,6 +137,7 @@ export default function HomePage() {
             {stages.map((stage, i) => {
               const color = STAGE_COLORS[stage.number]
               const isLatest = stage.number === stages.length
+              const href = stage.project ? `/child/build/${stage.id}` : `/child/stages/${stage.id}`
               return (
                 <motion.div
                   key={stage.id}
@@ -144,7 +145,7 @@ export default function HomePage() {
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: 0.1 * i + 0.5 }}
                 >
-                  <Link href={`/child/stages/${stage.id}`}>
+                  <Link href={href}>
                     <GlassCard hover className="p-5 group" glow={isLatest}>
                       <div className="flex items-center gap-4">
                         <div
