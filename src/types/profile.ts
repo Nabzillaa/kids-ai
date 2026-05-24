@@ -8,4 +8,6 @@ export interface ChildProfile {
   interests: string[]   // e.g. ["animals", "gaming", "space"]
   tutorialDone: boolean
   createdAt: string
+  recommendedStage?: string  // e.g. "stage-1", "stage-2"
+  quizScore?: number          // 0–3, from onboarding code-reading quiz
 }
